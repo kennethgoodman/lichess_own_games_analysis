@@ -7,8 +7,18 @@ import chess.pgn
 
 logger = logging.getLogger(__name__)
 
+LICHESS_DOT_ORG = 'https://lichess.org/'
 
-def convert_game(game_json: dict) -> Union[chess.pgn.Game, None]:
+
+def site_to_id(site_str: str) -> str:
+    return site_str.replace(LICHESS_DOT_ORG, "")
+
+
+def id_to_site(id: str) -> str:
+    return LICHESS_DOT_ORG + id
+
+
+def convert_game(game_json: dict, pgn_moves_str: Union[str, None] = None) -> Union[chess.pgn.Game, None]:
     """
     :param game_json: from berserk
     example:
@@ -41,9 +51,12 @@ def convert_game(game_json: dict) -> Union[chess.pgn.Game, None]:
         'moves': 'd4 d5 Bf4 Nf6 Nf3 ...',
         'clock': {'initial': 180, 'increment': 2, 'totalTime': 260}
     }
+    :param pgn: a string for the pgn, can be used to override the one from json
     :return: chess.pgn.Game
     """
-    pgn = io.StringIO(game_json['moves'])
+    if pgn_moves_str is None:
+        pgn_moves_str = game_json['moves']
+    pgn = io.StringIO(pgn_moves_str)
     if 'aiLevel' in game_json['players']['white'] or 'aiLevel' in game_json['players']['black']:
         logger.warning(f"skipping {game_json} because ailevel in players")
         return None
@@ -61,10 +74,21 @@ def convert_game(game_json: dict) -> Union[chess.pgn.Game, None]:
     except ValueError as ve:
         logger.error(f"had an error parsing: {game_json} with {ve}")
         return None
-    game.headers['Site'] = 'https://lichess.org/' + game_json['id']
+    game.headers['Site'] = id_to_site(game_json['id'])
+    game.headers['ID'] = game_json['id']
     game.headers['Date'] = game_json['createdAt']
     game.headers['White'] = game_json['players']['white']['user']['id']
+    game.headers['WhiteRating'] = str(game_json['players']['white']['rating'])
+    game.headers['WhiteRatingDiff'] = str(game_json['players']['white']['ratingDiff'])
     game.headers['Black'] = game_json['players']['black']['user']['id']
+    game.headers['BlackRating'] = str(game_json['players']['black']['rating'])
+    game.headers['BlackRatingDiff'] = str(game_json['players']['black']['ratingDiff'])
+    game.headers['Status'] = game_json['status']
+    game.headers['ClockInitial'] = str(game_json['clock']['initial'])
+    game.headers['ClockIncr'] = str(game_json['clock']['increment'])
+    game.headers['ClockTotal'] = str(game_json['clock']['totalTime'])
+    game.headers['Speed'] = game_json['speed']
+    game.headers['Perf'] = game_json['perf']
     return game
 
 

@@ -51,7 +51,37 @@ def read_data(userid, analysis_time):
         return games
 
 
-def get_all_games(userid, engine, download, parse, analysis_time=0.05):
+def combine_berserk_and_analysis_data(userid, download, analysis_time):
+    def get_new_games_data(games_data, games_lichess_dict):
+        new_games = []
+        for game in games_data:
+            id = berserk_to_python_chess.site_to_id(game.headers['Site'])
+            game_json = games_lichess_dict[id]
+            new_games.append(
+                berserk_to_python_chess.convert_game(
+                    game_json,
+                    pgn_moves_str=str(game)
+                )
+            )
+        return new_games
+    games_lichess = get_games_from_lichess(userid, download)
+    games_lichess_dict = {}
+    for game_json in games_lichess:
+        games_lichess_dict[game_json['id']] = game_json
+
+    games_data_without_analysis = read_data(userid, None)
+    new_games_without_analysis = get_new_games_data(games_data_without_analysis, games_lichess_dict)
+    save_data(new_games_without_analysis, userid, None)
+
+    if analysis_time is not None:
+        games_data_with_analysis = read_data(userid, analysis_time)
+        new_games_with_analysis = get_new_games_data(games_data_with_analysis, games_lichess_dict)
+        save_data(new_games_with_analysis, userid, analysis_time)
+        return new_games_with_analysis
+    return new_games_without_analysis
+
+
+def get_all_games(userid, engine, download, parse, analysis_time):
     if parse:
         # from `brew install stockfish`
         games = get_games_from_lichess(userid, download)
