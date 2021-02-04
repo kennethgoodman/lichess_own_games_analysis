@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Union
 import logging
 import time
 
@@ -19,12 +19,15 @@ def get_score(board, engine, analysis_time=0.1) -> Tuple[str, chess.engine.Score
     return str(score_from_white), score_from_white  # otherwise its mate or mate is already given
 
 
-def add_eval_to_game(game: chess.pgn.Game, engine: chess.engine.SimpleEngine, analysis_time) -> chess.pgn.Game:
+def add_eval_to_game(game: chess.pgn.Game, engine: chess.engine.SimpleEngine, analysis_time: float,
+                     should_re_add_analysis: bool = False) -> chess.pgn.Game:
     """
     MODIFIES "game" IN PLACE
     """
     current_move = game
     while len(current_move.variations):
+        if "eval" in current_move.comment and not should_re_add_analysis:
+            continue
         score, actual_eval = get_score(current_move.board(), engine, analysis_time=analysis_time)
         current_move.comment += f'[%eval {score}]'
         if current_move.eval().pov(chess.WHITE) != actual_eval:

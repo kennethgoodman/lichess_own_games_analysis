@@ -1,4 +1,4 @@
-from typing import Union, List
+from typing import Union, List, Callable
 import io
 import logging
 import time
@@ -18,7 +18,7 @@ def id_to_site(id: str) -> str:
     return LICHESS_DOT_ORG + id
 
 
-def convert_game(game_json: dict, pgn_moves_str: Union[str, None] = None) -> Union[chess.pgn.Game, None]:
+def convert_game(game_json: dict, pgn_moves_str: Union[str, None] = None, game_filter: Callable = None) -> Union[chess.pgn.Game, None]:
     """
     :param game_json: from berserk
     example:
@@ -51,52 +51,38 @@ def convert_game(game_json: dict, pgn_moves_str: Union[str, None] = None) -> Uni
         'moves': 'd4 d5 Bf4 Nf6 Nf3 ...',
         'clock': {'initial': 180, 'increment': 2, 'totalTime': 260}
     }
-    :param pgn: a string for the pgn, can be used to override the one from json
+    :param pgn_moves_str: a string for the pgn, can be used to override the one from json
+    :param game_filter: a filter to filter out games
     :return: chess.pgn.Game
     """
-    if pgn_moves_str is None:
-        pgn_moves_str = game_json['moves']
-    pgn = io.StringIO(pgn_moves_str)
-    if 'aiLevel' in game_json['players']['white'] or 'aiLevel' in game_json['players']['black']:
-        logger.warning(f"skipping {game_json} because ailevel in players")
+    if game_filter(game_json):
+        logger.info(f"skipping {game_json} because filter evaluated as true")
         return None
-    if 'user' not in game_json['players']['white'] or 'user' not in game_json['players']['white']:
-        logger.warning(f"skipping {game_json} because anonymous user")
-        return None  # some anonymous other user, going to ignore for now
-    if game_json['variant'] != 'standard':
-        logger.warning(f"skipping {game_json} not standard chess")
-        return None  # for non standard, not worth analyzing
-    if not game_json['rated']:
-        logger.warning(f"skipping {game_json} not rated chess")
-        return None  # for non rated, not worth analyzing
+    if pgn_moves_str is None:
+        pgn_moves_str = game_json['pgn']
+    pgn = io.StringIO(pgn_moves_str)
     try:
         game = chess.pgn.read_game(pgn)
     except ValueError as ve:
         logger.error(f"had an error parsing: {game_json} with {ve}")
         return None
-    game.headers['Site'] = id_to_site(game_json['id'])
     game.headers['ID'] = game_json['id']
-    game.headers['Date'] = game_json['createdAt']
-    game.headers['White'] = game_json['players']['white']['user']['id']
-    game.headers['WhiteRating'] = str(game_json['players']['white']['rating'])
-    game.headers['WhiteRatingDiff'] = str(game_json['players']['white']['ratingDiff'])
-    game.headers['Black'] = game_json['players']['black']['user']['id']
-    game.headers['BlackRating'] = str(game_json['players']['black']['rating'])
-    game.headers['BlackRatingDiff'] = str(game_json['players']['black']['ratingDiff'])
     game.headers['Status'] = game_json['status']
     game.headers['ClockInitial'] = str(game_json['clock']['initial'])
     game.headers['ClockIncr'] = str(game_json['clock']['increment'])
     game.headers['ClockTotal'] = str(game_json['clock']['totalTime'])
     game.headers['Speed'] = game_json['speed']
     game.headers['Perf'] = game_json['perf']
+    game.headers['opening'] = game_json['opening']
+    # TODO: if there is analysis, those variations should be added as well
     return game
 
 
-def convert_games(game_jsons: List[dict]) -> List[chess.pgn.Game]:
+def convert_games(game_jsons: List[dict], game_filter: Callable = None) -> List[chess.pgn.Game]:
     games = []
     start = time.time()
     for i, game_json in enumerate(game_jsons):
-        game = convert_game(game_json)
+        game = convert_game(game_json, game_filter=game_filter)
         if game is not None:
             games.append(game)
         if i % 10 == 0 and i != 0:

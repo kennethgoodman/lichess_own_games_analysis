@@ -1,15 +1,44 @@
 import os
 import pickle
 import logging
+import requests
+import json
+from functools import partial
 
-import berserk
+# import berserk
 
 DATA_FOLDER = 'data'
 logger = logging.getLogger(__name__)
 
-def get_games_from_lichess(userid):
-    client = berserk.Client()
-    return client.games.export_by_player(userid)
+
+def get_games_from_lichess(userid, max=None):
+    params = {
+        'pgnInJson': 'true',
+        'clocks': 'true',
+        'evals': 'true',
+        'opening': 'true'
+    }
+    if max:
+        params['max'] = int(max)
+    headers = {'Accept': 'application/x-ndjson'}
+    games = []
+    with requests.get(
+            url= f"https://lichess.org/api/games/user/{userid}",
+            params=params,
+            headers=headers,
+            stream=True
+        ) as r:
+        r.raise_for_status()
+        r.raw.read = partial(r.raw.read, decode_content=True)
+        for game in r.iter_lines():
+            games.append(
+                json.loads(game)
+            )
+    return games
+
+# def get_games_from_lichess(userid, max=None):
+#     client = berserk.Client()
+#     return client.games.export_by_player(userid, max=max)
 
 
 def get_path_to_user_id_games(userid):
@@ -36,7 +65,7 @@ def read_data(userid):
 
 def get_all_games(userid, download):
     if download or not data_exists(userid):
-        games = get_games_from_lichess(userid)
+        games = list(get_games_from_lichess(userid))
         save_data(games, userid)
     elif data_exists(userid):
         games = read_data(userid)
